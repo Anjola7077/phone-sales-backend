@@ -14,16 +14,17 @@ dotenv.config();
 
 const app = express();
 
-// Warn loudly at startup if Cloudinary credentials are missing or still placeholders
-const CLD_KEY = process.env.CLOUDINARY_API_KEY;
-const CLD_SECRET = process.env.CLOUDINARY_API_SECRET;
-if (!CLD_KEY || !CLD_SECRET || CLD_KEY === 'your_api_key_here' || CLD_SECRET === 'your_api_secret_here') {
+// Warn at startup if ImageKit credentials are missing
+const IMAGEKIT_PUBLIC_KEY = process.env.IMAGEKIT_PUBLIC_KEY;
+const IMAGEKIT_PRIVATE_KEY = process.env.IMAGEKIT_PRIVATE_KEY;
+const IMAGEKIT_URL_ENDPOINT = process.env.IMAGEKIT_URL_ENDPOINT;
+if (!IMAGEKIT_PUBLIC_KEY || !IMAGEKIT_PRIVATE_KEY || !IMAGEKIT_URL_ENDPOINT) {
   console.warn(
-    '\n⚠️  Cloudinary upload is NOT configured!\n' +
-    '   Put your real credentials in backend/.env:\n' +
-    '     CLOUDINARY_API_KEY=<from Cloudinary console>\n' +
-    '     CLOUDINARY_API_SECRET=<from Cloudinary console>\n' +
-    '   Console: https://console.cloudinary.com → Dashboard → Product Environment Credentials\n' +
+    '\n⚠️  ImageKit upload is NOT configured!\n' +
+    '   Add these values to backend/.env:\n' +
+    '     IMAGEKIT_PUBLIC_KEY=<your public key>\n' +
+    '     IMAGEKIT_PRIVATE_KEY=<your private key>\n' +
+    '     IMAGEKIT_URL_ENDPOINT=https://ik.imagekit.io/<your-id>\n' +
     '   Then restart the backend. Image uploads will fail until then.\n'
   );
 }

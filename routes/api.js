@@ -1,27 +1,21 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 import multer from 'multer';
-import { v2 as cloudinary } from 'cloudinary';
+import ImageKit from '@imagekit/nodejs';
 import Phone from '../models/Phone.js';
 import Order from '../models/Order.js';
 
+dotenv.config();
+
 const router = express.Router();
 
-// --- Cloudinary configuration (server-side, signed uploads) ---
-const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
-const API_KEY = process.env.CLOUDINARY_API_KEY;
-const API_SECRET = process.env.CLOUDINARY_API_SECRET;
-const UPLOAD_PRESET = process.env.CLOUDINARY_UPLOAD_PRESET;
-
-if (CLOUD_NAME) {
-  cloudinary.config({
-    cloud_name: CLOUD_NAME,
-    // Signed uploads when key/secret are provided; otherwise falls back to
-    // an unsigned upload preset (if configured).
-    ...(API_KEY && API_SECRET ? { api_key: API_KEY, api_secret: API_SECRET } : {}),
-  });
-}
+const imagekit = new ImageKit({
+  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -32,24 +26,23 @@ const upload = multer({
   },
 });
 
-const uploadToCloudinary = (buffer, mimetype, originalname) =>
-  new Promise((resolve, reject) => {
-    const dataUri = `data:${mimetype};base64,${buffer.toString('base64')}`;
-    const options = { folder: 'phone-store' };
-    if (!(API_KEY && API_SECRET)) {
-      // Unsigned mode: requires an "Unsigned" upload preset in the dashboard
-      if (!UPLOAD_PRESET) {
-        return reject(new Error(
-          'Cloudinary not configured. Add CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET (or CLOUDINARY_UPLOAD_PRESET) to backend/.env'
-        ));
-      }
-      options.upload_preset = UPLOAD_PRESET;
-    }
-    cloudinary.uploader
-      .upload(dataUri, options)
-      .then((result) => resolve(result))
-      .catch(reject);
+const uploadToImageKit = async (buffer, originalname) => {
+  const requiredKeys = ['IMAGEKIT_PUBLIC_KEY', 'IMAGEKIT_PRIVATE_KEY', 'IMAGEKIT_URL_ENDPOINT'];
+  const missing = requiredKeys.filter((key) => !process.env[key]);
+
+  if (missing.length) {
+    throw new Error(`ImageKit not configured. Add ${missing.join(', ')} to backend/.env`);
+  }
+
+  return imagekit.upload({
+    file: buffer.toString('base64'),
+    fileName: originalname || `phone-${Date.now()}`,
+    folder: 'phone-store',
+    useUniqueFileName: true,
+    tags: ['phone-store'],
+    isPrivateFile: false,
   });
+};
 
 const requireAuth = (req, res, next) => {
   const token = req.cookies?.token;
@@ -96,25 +89,22 @@ router.get('/orders/me', requireAuth, async (req, res) => {
   res.json(orders);
 });
 
-// Upload a product image to Cloudinary (authenticated users only)
+// Upload a product image to ImageKit (authenticated users only)
 router.post('/upload', requireAuth, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file provided (field name must be "image")' });
     }
-    if (!CLOUD_NAME) {
-      return res.status(500).json({ error: 'Cloudinary not configured. Add CLOUDINARY_CLOUD_NAME to backend/.env' });
-    }
 
-    const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype, req.file.originalname);
-    res.json({ url: result.secure_url, publicId: result.public_id });
+    const result = await uploadToImageKit(req.file.buffer, req.file.originalname);
+    res.json({ url: result.url, publicId: result.fileId || result.publicId || result.name });
   } catch (err) {
-    console.error('Cloudinary upload error:', err?.message || err);
+    console.error('ImageKit upload error:', err?.message || err);
     let msg = err?.message || 'Image upload failed';
-    if (err?.http_code === 401 || /unknown api key|invalid api key|signature/i.test(msg)) {
-      msg = 'Cloudinary rejected the credentials. Put your real API key and API secret from the Cloudinary console (Dashboard > Product Environment Credentials) into backend/.env as CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET, then restart the backend.';
-    } else if (/not configured/i.test(msg)) {
-      msg = 'Cloudinary not configured. Add CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET to backend/.env, then restart the backend.';
+    if (/not configured/i.test(msg)) {
+      msg = 'ImageKit not configured. Add IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, and IMAGEKIT_URL_ENDPOINT to backend/.env, then restart the backend.';
+    } else if (/invalid|unauthorized|authentication|signature|private key|public key/i.test(msg)) {
+      msg = 'ImageKit rejected the credentials. Check IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, and IMAGEKIT_URL_ENDPOINT in backend/.env, then restart the backend.';
     }
     res.status(500).json({ error: msg });
   }
