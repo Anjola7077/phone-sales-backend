@@ -5,9 +5,28 @@ import User from '../models/User.js';
 import Order from '../models/Order.js';
 
 const router = express.Router();
+const isCrossSite = Boolean(process.env.CLIENT_URL && process.env.CLIENT_URL.includes('vercel.app')) || process.env.NODE_ENV === 'production';
+const cookieOptions = {
+  httpOnly: true,
+  secure: isCrossSite,
+  sameSite: isCrossSite ? 'none' : 'lax',
+  maxAge: 24 * 60 * 60 * 1000,
+};
+
+const getTokenFromRequest = (req) => {
+  const cookieToken = req.cookies?.token;
+  if (cookieToken) return cookieToken;
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.replace('Bearer ', '');
+  }
+
+  return null;
+};
 
 const requireAuth = (req, res, next) => {
-  const token = req.cookies?.token;
+  const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
@@ -29,15 +48,10 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000 
-    });
 
-    res.json({ message: 'Logged in successfully' });
+    res.cookie('token', token, cookieOptions);
+
+    res.json({ message: 'Logged in successfully', token });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
   }
@@ -135,7 +149,7 @@ router.delete('/account', requireAuth, async (req, res) => {
 
 router.get('/me', (req, res) => {
   try {
-    const token = req.cookies?.token;
+    const token = getTokenFromRequest(req);
     if (!token) return res.json({ authenticated: false });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);

@@ -47,8 +47,20 @@ const uploadToImageKit = async (buffer, originalname) => {
   });
 };
 
+const getTokenFromRequest = (req) => {
+  const cookieToken = req.cookies?.token;
+  if (cookieToken) return cookieToken;
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.replace('Bearer ', '');
+  }
+
+  return null;
+};
+
 const requireAuth = (req, res, next) => {
-  const token = req.cookies?.token;
+  const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
