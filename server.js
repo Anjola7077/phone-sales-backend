@@ -55,7 +55,7 @@ const corsOptions = {
 
 app.use(helmet()); 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: '10kb' })); 
 app.use(cookieParser());
 // note: express-mongo-sanitize removed to avoid reassigning read-only req.query
