@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import multer from 'multer';
-import ImageKit from '@imagekit/nodejs';
+import ImageKit, { toFile } from '@imagekit/nodejs';
 import Phone from '../models/Phone.js';
 import Order from '../models/Order.js';
 
@@ -34,9 +34,12 @@ const uploadToImageKit = async (buffer, originalname) => {
     throw new Error(`ImageKit not configured. Add ${missing.join(', ')} to backend/.env`);
   }
 
-  return imagekit.upload({
-    file: buffer.toString('base64'),
-    fileName: originalname || `phone-${Date.now()}`,
+  const fileName = originalname || `phone-${Date.now()}`;
+  const file = await toFile(buffer, fileName);
+
+  return imagekit.files.upload({
+    file,
+    fileName,
     folder: 'phone-store',
     useUniqueFileName: true,
     tags: ['phone-store'],

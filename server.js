@@ -5,12 +5,12 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
-import authRoutes from './routes/auth.js';
-import apiRoutes from './routes/api.js';
-
 
 
 dotenv.config();
+
+const { default: authRoutes } = await import('./routes/auth.js');
+const { default: apiRoutes } = await import('./routes/api.js');
 
 const app = express();
 
